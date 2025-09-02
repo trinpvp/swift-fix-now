@@ -5,6 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import SwiftFyxLogo from '@/components/SwiftFyxLogo';
 import { ArrowLeft } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 interface AuthProps {
   onAuthSuccess: () => void;
@@ -21,10 +23,77 @@ const Auth = ({ onAuthSuccess, onBack }: AuthProps) => {
     rememberMe: false
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement actual authentication with Supabase
-    onAuthSuccess();
+    setLoading(true);
+
+    try {
+      if (isSignUp) {
+        // Sign up flow
+        if (formData.password !== formData.confirmPassword) {
+          toast({
+            variant: "destructive",
+            title: "Password mismatch",
+            description: "Passwords do not match. Please try again."
+          });
+          return;
+        }
+
+        const { data, error } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/`,
+            data: {
+              full_name: formData.email.split('@')[0], // Use email prefix as initial name
+              phone: formData.phone
+            }
+          }
+        });
+
+        if (error) throw error;
+
+        if (data.user && data.session) {
+          toast({
+            title: "Account created!",
+            description: "Welcome to SwiftFyx!"
+          });
+          onAuthSuccess();
+        } else {
+          toast({
+            title: "Check your email",
+            description: "Please check your email to verify your account."
+          });
+        }
+      } else {
+        // Sign in flow
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.password
+        });
+
+        if (error) throw error;
+
+        if (data.session) {
+          toast({
+            title: "Welcome back!",
+            description: "Successfully signed in."
+          });
+          onAuthSuccess();
+        }
+      }
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Authentication failed",
+        description: error.message || "Something went wrong. Please try again."
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleInputChange = (field: string, value: string | boolean) => {
@@ -142,8 +211,9 @@ const Auth = ({ onAuthSuccess, onBack }: AuthProps) => {
               type="submit" 
               variant="swiftfyx"
               className="w-full bg-white text-primary hover:bg-white/90 shadow-lg font-bold text-lg py-6"
+              disabled={loading}
             >
-              {isSignUp ? 'Sign Up' : 'Sign In'}
+              {loading ? 'Please wait...' : (isSignUp ? 'Sign Up' : 'Sign In')}
             </Button>
           </form>
 

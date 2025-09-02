@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import ServiceProviderCard from '@/components/ServiceProviderCard';
 import ServiceProviderProfile from '@/components/ServiceProviderProfile';
 import { Search, MapPin, Settings, User } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { User as SupabaseUser } from '@supabase/supabase-js';
 
 // Import service provider images
 import landscaperImage from '@/assets/landscaper-trevor.jpg';
@@ -32,11 +34,83 @@ interface ServiceProvider {
 
 interface HomeProps {
   onProfileClick: () => void;
+  user: SupabaseUser | null;
 }
 
-const Home = ({ onProfileClick }: HomeProps) => {
+const Home = ({ onProfileClick, user }: HomeProps) => {
   const [selectedProvider, setSelectedProvider] = useState<ServiceProvider | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [providers, setProviders] = useState<ServiceProvider[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [userProfile, setUserProfile] = useState<any>(null);
+
+  useEffect(() => {
+    fetchServiceProviders();
+    if (user) {
+      fetchUserProfile();
+    }
+  }, [user]);
+
+  const fetchUserProfile = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await (supabase as any)
+        .from('profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching profile:', error);
+        return;
+      }
+      
+      setUserProfile(data);
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    }
+  };
+
+  const fetchServiceProviders = async () => {
+    try {
+      const { data, error } = await (supabase as any)
+        .from('service_providers')
+        .select('*')
+        .eq('is_available', true)
+        .order('rating', { ascending: false });
+
+      if (error) throw error;
+
+      // Transform the data to match our component interface
+      const transformedProviders: ServiceProvider[] = (data || []).map((provider: any) => ({
+        id: provider.id,
+        name: provider.business_name,
+        service: provider.service_category,
+        rating: provider.rating || 0,
+        reviewCount: provider.review_count || 0,
+        location: provider.location_address || '',
+        price: `$${provider.hourly_rate || 0}/hour`,
+        imageUrl: landscaperImage, // Default image for now
+        isAvailable: provider.is_available,
+        tags: provider.specialties || [],
+        description: provider.description || '',
+        specialties: provider.specialties || [],
+        yearsInBusiness: provider.years_experience || 0,
+        languages: provider.languages || ['English'],
+        backgroundChecked: provider.background_checked,
+        responseTime: `< ${provider.response_time_minutes || 60} min`
+      }));
+
+      setProviders(transformedProviders);
+    } catch (error) {
+      console.error('Error fetching service providers:', error);
+      // Fallback to mock data if there's an error
+      setProviders(featuredProviders);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Mock data - in real app this would come from API
   const featuredProviders: ServiceProvider[] = [
@@ -150,10 +224,12 @@ const Home = ({ onProfileClick }: HomeProps) => {
       <div className="bg-card p-6 border-b border-border">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-xl font-semibold">Hello, Robbie</h1>
+            <h1 className="text-xl font-semibold">
+              Hello, {userProfile?.full_name || user?.email?.split('@')[0] || 'User'}
+            </h1>
             <div className="flex items-center text-sm text-muted-foreground mt-1">
               <MapPin className="w-4 h-4 mr-1" />
-              <span>919 Hidden Valley...</span>
+              <span>{userProfile?.address || 'Location not set'}</span>
             </div>
           </div>
           <button 
@@ -181,15 +257,27 @@ const Home = ({ onProfileClick }: HomeProps) => {
         {/* Available Now */}
         <section>
           <h2 className="text-lg font-semibold mb-4">Available Now Near You</h2>
-          <div className="grid grid-cols-2 gap-4">
-            {featuredProviders.map((provider) => (
-              <ServiceProviderCard
-                key={provider.id}
-                provider={provider}
-                onClick={handleProviderClick}
-              />
-            ))}
-          </div>
+          {loading ? (
+            <div className="grid grid-cols-2 gap-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="bg-card rounded-xl shadow-card p-4 animate-pulse">
+                  <div className="h-32 bg-secondary rounded-lg mb-3"></div>
+                  <div className="h-4 bg-secondary rounded mb-2"></div>
+                  <div className="h-3 bg-secondary rounded"></div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              {providers.map((provider) => (
+                <ServiceProviderCard
+                  key={provider.id}
+                  provider={provider}
+                  onClick={handleProviderClick}
+                />
+              ))}
+            </div>
+          )}
         </section>
 
         {/* Featured Services */}
