@@ -61,6 +61,11 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
+				},
+				swiftfyx: {
+					orange: 'hsl(var(--swiftfyx-orange))',
+					'orange-light': 'hsl(var(--swiftfyx-orange-light))',
+					'orange-dark': 'hsl(var(--swiftfyx-orange-dark))'
 				}
 			},
 			borderRadius: {
